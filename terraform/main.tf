@@ -181,112 +181,67 @@ resource "aws_sns_topic_subscription" "email" {
   endpoint  = var.alert_email
 }
 
+locals {
+  cloudwatch_alarms = jsondecode(templatefile("${path.module}/../alerting/alarms.json", {
+    name          = var.name
+    instance_id   = aws_instance.app.id
+    sns_topic_arn = aws_sns_topic.alarms.arn
+  }))
+}
+
 resource "aws_cloudwatch_metric_alarm" "ec2_cpu" {
-  alarm_name          = "${var.name}-ec2-cpu-high"
-  alarm_description   = "EC2 CPU exceeded 80% for two consecutive five-minute periods."
-  namespace           = "AWS/EC2"
-  metric_name         = "CPUUtilization"
-  statistic           = "Average"
-  period              = 300
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
-  threshold           = 80
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  dimensions = {
-    InstanceId = aws_instance.app.id
-  }
-  alarm_actions = [aws_sns_topic.alarms.arn]
+  alarm_name          = local.cloudwatch_alarms.ec2_cpu.alarm_name
+  alarm_description   = local.cloudwatch_alarms.ec2_cpu.alarm_description
+  namespace           = local.cloudwatch_alarms.ec2_cpu.namespace
+  metric_name         = local.cloudwatch_alarms.ec2_cpu.metric_name
+  statistic           = local.cloudwatch_alarms.ec2_cpu.statistic
+  period              = local.cloudwatch_alarms.ec2_cpu.period
+  evaluation_periods  = local.cloudwatch_alarms.ec2_cpu.evaluation_periods
+  datapoints_to_alarm = local.cloudwatch_alarms.ec2_cpu.datapoints_to_alarm
+  threshold           = local.cloudwatch_alarms.ec2_cpu.threshold
+  comparison_operator = local.cloudwatch_alarms.ec2_cpu.comparison_operator
+  treat_missing_data  = local.cloudwatch_alarms.ec2_cpu.treat_missing_data
+  dimensions          = local.cloudwatch_alarms.ec2_cpu.dimensions
+  alarm_actions       = local.cloudwatch_alarms.ec2_cpu.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_errors" {
-  alarm_name          = "${var.name}-database-errors"
-  alarm_description   = "At least one database operation failed in five minutes."
-  namespace           = "ToDoListApi"
-  metric_name         = "DatabaseOperationErrors"
-  statistic           = "Sum"
-  period              = 300
-  evaluation_periods  = 1
-  datapoints_to_alarm = 1
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  dimensions = {
-    Service = var.name
-  }
-  alarm_actions = [aws_sns_topic.alarms.arn]
+  alarm_name          = local.cloudwatch_alarms.database_errors.alarm_name
+  alarm_description   = local.cloudwatch_alarms.database_errors.alarm_description
+  namespace           = local.cloudwatch_alarms.database_errors.namespace
+  metric_name         = local.cloudwatch_alarms.database_errors.metric_name
+  statistic           = local.cloudwatch_alarms.database_errors.statistic
+  period              = local.cloudwatch_alarms.database_errors.period
+  evaluation_periods  = local.cloudwatch_alarms.database_errors.evaluation_periods
+  datapoints_to_alarm = local.cloudwatch_alarms.database_errors.datapoints_to_alarm
+  threshold           = local.cloudwatch_alarms.database_errors.threshold
+  comparison_operator = local.cloudwatch_alarms.database_errors.comparison_operator
+  treat_missing_data  = local.cloudwatch_alarms.database_errors.treat_missing_data
+  dimensions          = local.cloudwatch_alarms.database_errors.dimensions
+  alarm_actions       = local.cloudwatch_alarms.database_errors.alarm_actions
 }
 
 resource "aws_cloudwatch_metric_alarm" "tasks_created" {
-  alarm_name          = "${var.name}-unusual-task-volume"
-  alarm_description   = "At least 30 tasks were created in five minutes; investigate unusual activity."
-  namespace           = "ToDoListApi"
-  metric_name         = "TasksCreated"
-  statistic           = "Sum"
-  period              = 300
-  evaluation_periods  = 1
-  datapoints_to_alarm = 1
-  threshold           = 30
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  dimensions = {
-    Service = var.name
-  }
-  alarm_actions = [aws_sns_topic.alarms.arn]
+  alarm_name          = local.cloudwatch_alarms.tasks_created.alarm_name
+  alarm_description   = local.cloudwatch_alarms.tasks_created.alarm_description
+  namespace           = local.cloudwatch_alarms.tasks_created.namespace
+  metric_name         = local.cloudwatch_alarms.tasks_created.metric_name
+  statistic           = local.cloudwatch_alarms.tasks_created.statistic
+  period              = local.cloudwatch_alarms.tasks_created.period
+  evaluation_periods  = local.cloudwatch_alarms.tasks_created.evaluation_periods
+  datapoints_to_alarm = local.cloudwatch_alarms.tasks_created.datapoints_to_alarm
+  threshold           = local.cloudwatch_alarms.tasks_created.threshold
+  comparison_operator = local.cloudwatch_alarms.tasks_created.comparison_operator
+  treat_missing_data  = local.cloudwatch_alarms.tasks_created.treat_missing_data
+  dimensions          = local.cloudwatch_alarms.tasks_created.dimensions
+  alarm_actions       = local.cloudwatch_alarms.tasks_created.alarm_actions
 }
 
 resource "aws_cloudwatch_dashboard" "app" {
   dashboard_name = "${var.name}-dashboard"
-  dashboard_body = jsonencode({
-    widgets = [
-      {
-        type   = "metric"
-        x      = 0
-        y      = 0
-        width  = 12
-        height = 6
-        properties = {
-          title  = "EC2 CPU utilization"
-          region = var.aws_region
-          period = 300
-          stat   = "Average"
-          metrics = [
-            ["AWS/EC2", "CPUUtilization", "InstanceId", aws_instance.app.id]
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 0
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Database operation errors"
-          region = var.aws_region
-          period = 300
-          stat   = "Sum"
-          metrics = [
-            ["ToDoListApi", "DatabaseOperationErrors", "Service", var.name]
-          ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Tasks created"
-          region = var.aws_region
-          period = 300
-          stat   = "Sum"
-          metrics = [
-            ["ToDoListApi", "TasksCreated", "Service", var.name]
-          ]
-        }
-      }
-    ]
+  dashboard_body = templatefile("${path.module}/../alerting/cloudwatch-dashboard.json", {
+    region      = var.aws_region
+    instance_id = aws_instance.app.id
+    service     = var.name
   })
 }

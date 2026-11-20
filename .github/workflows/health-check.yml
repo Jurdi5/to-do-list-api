@@ -1,0 +1,33 @@
+name: API health check
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ vars.API_URL }}
+    steps:
+      - name: Check API health and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$API_URL" ]]; then
+            echo "Set the repository Actions variable API_URL to the API base URL." >&2
+            exit 1
+          fi
+
+          API_URL="${API_URL%/}"
+          HEALTH_RESPONSE=$(curl --fail --silent --show-error --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 "$API_URL/health")
+          echo "Health response: $HEALTH_RESPONSE"
+          echo "$HEALTH_RESPONSE" | jq -e '.status == "OK" and (.version | type == "string" and length > 0)'
+
+          VERSION_RESPONSE=$(curl --fail --silent --show-error --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 "$API_URL/version")
+          echo "Version response: $VERSION_RESPONSE"
+          echo "$VERSION_RESPONSE" | jq -e '.version | type == "string" and length > 0'

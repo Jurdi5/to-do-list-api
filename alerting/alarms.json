@@ -1,0 +1,59 @@
+{
+  "ec2_cpu": {
+    "alarm_name": "${name}-ec2-cpu-high",
+    "alarm_description": "EC2 CPU exceeded 80% for two consecutive five-minute periods.",
+    "namespace": "AWS/EC2",
+    "metric_name": "CPUUtilization",
+    "statistic": "Average",
+    "period": 300,
+    "evaluation_periods": 2,
+    "datapoints_to_alarm": 2,
+    "threshold": 80,
+    "comparison_operator": "GreaterThanOrEqualToThreshold",
+    "treat_missing_data": "notBreaching",
+    "dimensions": {
+      "InstanceId": "${instance_id}"
+    },
+    "alarm_actions": [
+      "${sns_topic_arn}"
+    ]
+  },
+  "database_errors": {
+    "alarm_name": "${name}-database-errors",
+    "alarm_description": "At least one database operation failed in five minutes.",
+    "namespace": "ToDoListApi",
+    "metric_name": "DatabaseOperationErrors",
+    "statistic": "Sum",
+    "period": 300,
+    "evaluation_periods": 1,
+    "datapoints_to_alarm": 1,
+    "threshold": 1,
+    "comparison_operator": "GreaterThanOrEqualToThreshold",
+    "treat_missing_data": "notBreaching",
+    "dimensions": {
+      "Service": "${name}"
+    },
+    "alarm_actions": [
+      "${sns_topic_arn}"
+    ]
+  },
+  "tasks_created": {
+    "alarm_name": "${name}-unusual-task-volume",
+    "alarm_description": "At least 30 tasks were created in five minutes; investigate unusual activity.",
+    "namespace": "ToDoListApi",
+    "metric_name": "TasksCreated",
+    "statistic": "Sum",
+    "period": 300,
+    "evaluation_periods": 1,
+    "datapoints_to_alarm": 1,
+    "threshold": 30,
+    "comparison_operator": "GreaterThanOrEqualToThreshold",
+    "treat_missing_data": "notBreaching",
+    "dimensions": {
+      "Service": "${name}"
+    },
+    "alarm_actions": [
+      "${sns_topic_arn}"
+    ]
+  }
+}
