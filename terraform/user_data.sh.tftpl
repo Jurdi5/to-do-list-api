@@ -1,0 +1,111 @@
+#!/bin/bash
+set -euo pipefail
+
+dnf update -y
+dnf install -y git nginx unzip python3.11 python3.11-pip
+systemctl enable --now amazon-ssm-agent
+
+mkdir -p /opt/releases
+git clone --depth 1 https://github.com/${github_repository}.git /opt/releases/bootstrap
+
+cat > /etc/to-do-list-api.env <<'APP_ENV'
+AWS_REGION=${aws_region}
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_SECRET_ARN=${db_secret_arn}
+APP_VERSION=bootstrap
+METRICS_NAMESPACE=${metrics_namespace}
+METRICS_SERVICE=${metrics_service}
+APP_ENV
+chmod 600 /etc/to-do-list-api.env
+
+python3.11 -m venv /opt/releases/bootstrap/.venv
+/opt/releases/bootstrap/.venv/bin/pip install --upgrade pip
+/opt/releases/bootstrap/.venv/bin/pip install -r /opt/releases/bootstrap/src/requirements.txt
+ln -sfn /opt/releases/bootstrap /opt/${app_name}
+
+cat > /etc/systemd/system/to-do-list-api.service <<'SERVICE'
+[Unit]
+Description=to-do-list API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/${app_name}
+EnvironmentFile=/etc/to-do-list-api.env
+ExecStart=/opt/${app_name}/.venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+cat > /etc/nginx/conf.d/default.conf <<'NGINX'
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+
+cat > /usr/local/bin/deploy-release.sh <<'DEPLOY'
+#!/bin/bash
+set -euo pipefail
+
+VERSION="$1"
+if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Expected a release tag in vMAJOR.MINOR.PATCH format" >&2
+    exit 2
+fi
+
+set -a
+source /etc/to-do-list-api.env
+set +a
+
+RELEASE_DIR="/opt/releases/$VERSION"
+ARCHIVE="/tmp/to-do-list-api-$VERSION.zip"
+curl --fail --location --retry 5 --retry-all-errors \
+    "https://github.com/${github_repository}/releases/download/$VERSION/to-do-list-api.zip" \
+    --output "$ARCHIVE"
+mkdir -p "$RELEASE_DIR"
+unzip -q -o "$ARCHIVE" -d "$RELEASE_DIR"
+python3.11 -m venv "$RELEASE_DIR/.venv"
+"$RELEASE_DIR/.venv/bin/pip" install --upgrade pip
+"$RELEASE_DIR/.venv/bin/pip" install -r "$RELEASE_DIR/src/requirements.txt"
+printf 'AWS_REGION=%s\nDB_HOST=%s\nDB_PORT=%s\nDB_NAME=%s\nDB_SECRET_ARN=%s\nAPP_VERSION=%s\nMETRICS_NAMESPACE=%s\nMETRICS_SERVICE=%s\n' \
+    "$AWS_REGION" "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_SECRET_ARN" "$VERSION" "$METRICS_NAMESPACE" "$METRICS_SERVICE" \
+    > /etc/to-do-list-api.env
+chmod 600 /etc/to-do-list-api.env
+ln -sfn "$RELEASE_DIR" /opt/${app_name}.new
+mv -Tf /opt/${app_name}.new /opt/${app_name}
+systemctl restart to-do-list-api
+
+for attempt in $(seq 1 30); do
+    if curl --fail --silent http://127.0.0.1:8000/version | grep -Fq "\"version\":\"$VERSION\""; then
+        echo "Deployed $VERSION"
+        exit 0
+    fi
+    sleep 2
+done
+
+echo "API did not report version $VERSION after restart" >&2
+systemctl status to-do-list-api --no-pager >&2 || true
+exit 1
+DEPLOY
+chmod 750 /usr/local/bin/deploy-release.sh
+chown root:root /usr/local/bin/deploy-release.sh
+
+systemctl enable --now to-do-list-api
+systemctl enable --now nginx
