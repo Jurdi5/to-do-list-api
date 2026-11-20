@@ -40,6 +40,12 @@ variable "db_instance_class" {
   default     = "db.t3.micro"
 }
 
+variable "lab_instance_profile_name" {
+  description = "Name of the pre-existing EC2 instance profile associated with the Learner Lab LabRole."
+  type        = string
+  default     = "LabInstanceProfile"
+}
+
 variable "ssh_cidr" {
   description = "Optional single CIDR allowed to SSH; null disables inbound SSH."
   type        = string

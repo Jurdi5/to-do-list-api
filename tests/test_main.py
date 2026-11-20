@@ -124,7 +124,7 @@ def test_database_url_uses_secret_manager_credentials(monkeypatch):
             return {
                 "SecretString": (
                     '{"username":"db-user","password":"sensitive",'
-                    '"host":"rds.example","port":5432}'
+                    '"port":5432}'
                 )
             }
 
@@ -139,6 +139,7 @@ def test_database_url_uses_secret_manager_credentials(monkeypatch):
     monkeypatch.setenv("DB_SECRET_ARN", "secret-arn")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("DB_NAME", "todolist")
+    monkeypatch.setenv("DB_HOST", "rds.example")
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     database_url = _database_url_from_environment()

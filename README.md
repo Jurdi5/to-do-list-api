@@ -61,7 +61,7 @@ python -m pytest
 
 ## Infraestructura en AWS
 
-`terraform/` crea la EC2, los Security Groups, un Key Pair, RDS PostgreSQL privado, el secreto administrado por RDS en Secrets Manager, el rol de instancia/Systems Manager, SNS, las alarmas y el dashboard. `terraform/main.tf` configura el backend S3 `to-do-list-p4-state` en `us-east-1`; el bucket debe existir en esa región antes de inicializar Terraform. Protege ese bucket con versionado, cifrado y acceso restringido al equipo. El backend usa bloqueo nativo de S3 (`use_lockfile`) y el estado nunca debe subirse al repositorio.
+`terraform/` crea la EC2, los Security Groups, un Key Pair, RDS PostgreSQL privado, el secreto administrado por RDS en Secrets Manager, SNS, las alarmas y el dashboard. En Learner Lab, la EC2 usa el instance profile preexistente asociado a `LabRole`; Terraform no crea ni modifica roles IAM. El nombre predeterminado del instance profile es `LabInstanceProfile`; cámbialo con `-var="lab_instance_profile_name=..."` si tu consola muestra otro nombre. El rol debe tener permisos para leer el secreto RDS, publicar métricas en CloudWatch y conectarse a Systems Manager. `terraform/main.tf` configura el backend S3 `to-do-list-p4-state` en `us-east-1`; el bucket debe existir en esa región antes de inicializar Terraform. Protege ese bucket con versionado, cifrado y acceso restringido al equipo. El backend usa bloqueo nativo de S3 (`use_lockfile`) y el estado nunca debe subirse al repositorio.
 
 Desde PowerShell, en la raíz del repositorio:
 
@@ -75,7 +75,7 @@ terraform apply tfplan
 terraform output api_url
 ```
 
-La cuenta debe tener permisos de Learner Lab para EC2, RDS, IAM, Secrets Manager, SSM, CloudWatch y SNS, y una VPC predeterminada con subredes en al menos dos zonas de disponibilidad. La EC2 descarga este repositorio público durante el arranque, instala sus dependencias, configura Nginx/systemd y arranca la API sin acceso SSH. El puerto 22 no está abierto por defecto. Terraform genera un par de llaves; el output `ssh_private_key_pem` es sensible y queda en el estado remoto, así que restringe el acceso al estado.
+La cuenta debe tener permisos de Learner Lab para EC2, RDS, Secrets Manager, CloudWatch y SNS, permiso para pasar el instance profile existente a EC2, y una VPC predeterminada con subredes en al menos dos zonas de disponibilidad. La EC2 descarga este repositorio público durante el arranque, instala sus dependencias, configura Nginx/systemd y arranca la API sin acceso SSH. El puerto 22 no está abierto por defecto. Terraform genera un par de llaves; el output `ssh_private_key_pem` es sensible y queda en el estado remoto, así que restringe el acceso al estado.
 
 La instancia RDS no es pública y solo acepta PostgreSQL desde el Security Group de la API. RDS administra la contraseña maestra en Secrets Manager. **`terraform destroy` elimina también RDS y sus datos.**
 
@@ -92,6 +92,7 @@ Después de aplicar:
 Para que Continuous Deployment pueda acceder al Learner Lab, agrega en **Settings → Secrets and variables → Actions**:
 
 - Secrets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` y `AWS_SESSION_TOKEN` tomados de la sesión activa de Learner Lab.
+- Secret `RELEASE_TOKEN` con un token de GitHub limitado al repositorio y permiso `Contents: Read and write`; se usa para publicar el release y disparar Continuous Deployment.
 - Variable `AWS_REGION` con valor `us-east-1` (también es el valor predeterminado del workflow).
 
 Las credenciales de Learner Lab vencen; actualiza los tres secrets antes de publicar un release si la sesión expiró. El deploy usa Systems Manager, no SSH, y requiere que exista una instancia EC2 activa del proyecto.

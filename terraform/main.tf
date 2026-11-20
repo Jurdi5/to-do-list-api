@@ -140,59 +140,6 @@ resource "aws_db_instance" "app" {
   }
 }
 
-resource "aws_iam_role" "ec2" {
-  name = "${var.name}-ec2"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
-
-  tags = {
-    Project = var.name
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "ssm" {
-  role       = aws_iam_role.ec2.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy" "app" {
-  name = "${var.name}-app"
-  role = aws_iam_role.ec2.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_db_instance.app.master_user_secret[0].secret_arn
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["cloudwatch:PutMetricData"]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "cloudwatch:namespace" = "ToDoListApi"
-          }
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_instance_profile" "app" {
-  name = "${var.name}-ec2"
-  role = aws_iam_role.ec2.name
-}
-
 resource "aws_instance" "app" {
   ami                         = data.aws_ssm_parameter.amazon_linux_2023.value
   instance_type               = var.ec2_instance_type
@@ -200,7 +147,7 @@ resource "aws_instance" "app" {
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.app.id]
   key_name                    = aws_key_pair.app.key_name
-  iam_instance_profile        = aws_iam_instance_profile.app.name
+  iam_instance_profile        = var.lab_instance_profile_name
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     aws_region        = var.aws_region
     db_host           = aws_db_instance.app.address
@@ -213,11 +160,6 @@ resource "aws_instance" "app" {
     metrics_service   = var.name
   })
   user_data_replace_on_change = true
-
-  depends_on = [
-    aws_iam_role_policy.app,
-    aws_iam_role_policy_attachment.ssm,
-  ]
 
   tags = {
     Name    = var.name

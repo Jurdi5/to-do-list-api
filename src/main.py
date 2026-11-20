@@ -124,11 +124,16 @@ def _database_url_from_environment() -> str | URL:
             "secretsmanager", region_name=region
         ).get_secret_value(SecretId=secret_arn)
         credentials = json.loads(secret_response["SecretString"])
+        host = os.getenv("DB_HOST") or credentials.get("host")
+        if not host:
+            raise RuntimeError(
+                "DB_HOST must be set or included in the database secret"
+            )
         return URL.create(
             "postgresql+psycopg2",
             username=credentials["username"],
             password=credentials["password"],
-            host=os.getenv("DB_HOST", credentials["host"]),
+            host=host,
             port=int(os.getenv("DB_PORT", str(credentials.get("port", 5432)))),
             database=os.getenv("DB_NAME", credentials.get("dbname", "postgres")),
         )
